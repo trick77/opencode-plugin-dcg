@@ -56,18 +56,31 @@ project-level `.dcg.toml` — see the
 dcg's own `DCG_BYPASS=1` works as usual: the plugin asks dcg, and dcg answers
 allow.
 
-The plugin itself reads only the environment:
+The plugin reads two layers. `opencode.json` is the durable one — pass options
+by replacing the plugin string with a `[spec, options]` pair:
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `DCG_PLUGIN_ENABLED` | `true` | `false`/`0`/`no`/`off` disables the plugin entirely |
-| `DCG_PLUGIN_FAIL_MODE` | `open` | `open` runs the command when dcg cannot be consulted; `closed` blocks it |
-| `DCG_PLUGIN_TIMEOUT_MS` | `5000` | Timeout for a single dcg invocation |
-| `DCG_PLUGIN_TOOLS` | `bash` | Comma-separated tool names to check, case-insensitive. Only tools whose arguments carry a `command` string can be checked — a listed tool without one passes through unchecked |
-| `DCG_PLUGIN_BINARY` | `dcg` | Binary name to resolve on `PATH`, or an absolute path |
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    ["opencode-plugin-dcg@0.1.1", { "failMode": "closed", "tools": ["bash", "my-shell-tool"] }]
+  ]
+}
+```
 
-An unusable value is reported at startup and the default is used — a
-`DCG_PLUGIN_FAIL_MODE=close` typo will not quietly leave you fail-open.
+Environment variables override those, so a single session can be re-pointed
+without editing config:
+
+| Option | Variable | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | `DCG_PLUGIN_ENABLED` | `true` | `false` disables the plugin entirely |
+| `failMode` | `DCG_PLUGIN_FAIL_MODE` | `open` | `open` runs the command when dcg cannot be consulted; `closed` blocks it |
+| `timeoutMs` | `DCG_PLUGIN_TIMEOUT_MS` | `5000` | Timeout for a single dcg invocation |
+| `tools` | `DCG_PLUGIN_TOOLS` | `bash` | Tool names to check, case-insensitive — a JSON array in config, comma-separated in the environment. Only tools whose arguments carry a `command` string can be checked — a listed tool without one passes through unchecked |
+| `binary` | `DCG_PLUGIN_BINARY` | `dcg` | Binary name to resolve on `PATH`, or an absolute path |
+
+An unusable value is reported at startup and ignored, leaving the layer beneath
+it standing — a `failMode: "close"` typo will not quietly leave you fail-open.
 
 ```bash
 export DCG_PLUGIN_FAIL_MODE=closed   # block whenever dcg cannot answer

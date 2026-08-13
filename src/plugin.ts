@@ -16,20 +16,20 @@
 // Requires the dcg binary — the plugin does not install it:
 //   https://github.com/Dicklesworthstone/destructive_command_guard#installation
 //
-// Configure in opencode.json:
+// Configure in opencode.json, either bare or with options:
 //
 //   { "plugin": ["opencode-plugin-dcg@0.1.1"] }
+//   { "plugin": [["opencode-plugin-dcg@0.1.1", { "failMode": "closed" }]] }
 //
-// Behaviour is set through the environment: DCG_PLUGIN_ENABLED,
-// DCG_PLUGIN_FAIL_MODE, DCG_PLUGIN_TIMEOUT_MS, DCG_PLUGIN_TOOLS,
-// DCG_PLUGIN_BINARY. See the README.
+// Options: enabled, failMode, timeoutMs, tools, binary. The matching
+// DCG_PLUGIN_* environment variables override them. See the README.
 
-import type { Plugin } from '@opencode-ai/plugin'
-import { configFromEnv } from './config.ts'
+import type { Plugin, PluginOptions } from '@opencode-ai/plugin'
+import { resolveConfig } from './config.ts'
 import { createGuard } from './guard.ts'
 
-export const DcgPlugin: Plugin = async () => {
-  const { config, warnings } = configFromEnv()
+export const DcgPlugin: Plugin = async (_input, options?: PluginOptions) => {
+  const { config, warnings } = resolveConfig(options)
 
   // console is the only sink used on purpose: it reaches whoever is attached
   // to the opencode server's stdout without touching the plugin client, and a
@@ -46,7 +46,7 @@ export const DcgPlugin: Plugin = async () => {
   for (const warning of warnings) report('warn', `opencode-plugin-dcg: ${warning}`)
 
   if (!config.enabled) {
-    report('warn', 'opencode-plugin-dcg: disabled via DCG_PLUGIN_ENABLED — commands are NOT being checked.')
+    report('warn', 'opencode-plugin-dcg: disabled by configuration — commands are NOT being checked.')
     return {}
   }
 

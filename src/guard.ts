@@ -34,7 +34,10 @@ export function blockMessage(command: string, outcome: DcgOutcome): string {
   } else {
     lines.push(`Blocked: dcg could not check this command (${outcome.reason}): ${command}`)
     lines.push(`Detail: ${outcome.detail}`)
-    lines.push('DCG_PLUGIN_FAIL_MODE=closed blocks whenever dcg cannot be consulted.')
+    // This branch is only ever reached from the fail-closed path, so the note
+    // states why the block happened. Advertising DCG_PLUGIN_FAIL_MODE=closed
+    // here would tell the user to switch on what is already switched on.
+    lines.push('Blocked because DCG_PLUGIN_FAIL_MODE=closed. Fix dcg, or set it to open to run unchecked.')
   }
   return lines.join('\n')
 }
@@ -68,7 +71,9 @@ export function createGuard(deps: GuardDeps) {
 
   return async function check(tool: string, args: unknown): Promise<void> {
     if (!config.enabled) return
-    if (!config.tools.has(tool)) return
+    // Config lowercases the configured names; lowercase the incoming one too
+    // so the two sides can never drift apart on casing alone.
+    if (!config.tools.has(tool.toLowerCase())) return
 
     const command = commandFromArgs(args)
     if (command === null) return

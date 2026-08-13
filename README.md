@@ -54,7 +54,7 @@ The plugin itself reads only the environment:
 | `DCG_PLUGIN_ENABLED` | `true` | `false`/`0`/`no`/`off` disables the plugin entirely |
 | `DCG_PLUGIN_FAIL_MODE` | `open` | `open` runs the command when dcg cannot be consulted; `closed` blocks it |
 | `DCG_PLUGIN_TIMEOUT_MS` | `5000` | Timeout for a single dcg invocation |
-| `DCG_PLUGIN_TOOLS` | `bash` | Comma-separated tool names to check |
+| `DCG_PLUGIN_TOOLS` | `bash` | Comma-separated tool names to check, case-insensitive. Only tools whose arguments carry a `command` string can be checked — a listed tool without one passes through unchecked |
 | `DCG_PLUGIN_BINARY` | `dcg` | Binary name to resolve on `PATH`, or an absolute path |
 
 An unusable value is reported at startup and the default is used — a
@@ -63,7 +63,9 @@ An unusable value is reported at startup and the default is used — a
 ```bash
 export DCG_PLUGIN_FAIL_MODE=closed   # block whenever dcg cannot answer
 export DCG_PLUGIN_TIMEOUT_MS=3000
-export DCG_PLUGIN_TOOLS=bash,task
+# bash is the only built-in tool with a `command` argument; widen this only for
+# a custom or MCP tool that also takes one.
+export DCG_PLUGIN_TOOLS=bash,my-shell-tool
 ```
 
 ## How it works

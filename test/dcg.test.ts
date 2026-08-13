@@ -64,6 +64,43 @@ test('survives a banner printed ahead of the JSON', () => {
   assert.deepEqual(parsed, { decision: 'deny' })
 })
 
+// Every one of these used to parse as garbage and fail open under the default
+// fail-mode, i.e. run the command dcg had just denied.
+test('finds the verdict despite noise around it', () => {
+  for (const stdout of [
+    'using profile {default}\n{"decision":"deny"}',
+    '{"decision":"deny"}\ndcg: 1 rule matched',
+    '{\n  "decision": "deny"\n}\ntook 3ms',
+    '{"progress":1}\n{"decision":"deny"}',
+    '{"decision":"deny","reason":"brace } inside a string"}',
+  ]) {
+    const parsed = parseDecisionJSON(stdout)
+    assert.equal(parsed?.decision, 'deny', stdout)
+  }
+})
+
+// A dcg that printed its verdict and then hung still answered. Dropping that
+// answer and resolving the kill through the fail-mode would run a denied
+// command.
+test('a verdict already on stdout beats a timeout kill', () => {
+  const outcome = interpret({
+    stdout: JSON.stringify({ decision: 'deny', reason: 'root delete' }),
+    stderr: '',
+    code: null,
+    timedOut: true,
+  })
+
+  assert.equal(outcome.kind, 'verdict')
+  assert.equal(outcome.kind === 'verdict' && outcome.blocked, true)
+})
+
+test('an oversized unreadable body is truncated before it is quoted back', () => {
+  const outcome = interpret({ stdout: 'x'.repeat(50_000), stderr: '', code: 2 })
+
+  assert.equal(outcome.kind, 'failure')
+  assert.ok(outcome.kind === 'failure' && outcome.detail.length < 500)
+})
+
 test('a missing binary is a failure, not a decision', () => {
   const outcome = interpret({ stdout: '', stderr: '', code: null, error: { code: 'ENOENT' } })
 

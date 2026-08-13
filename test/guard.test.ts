@@ -50,11 +50,32 @@ test('tools outside the configured set are never checked', async () => {
   assert.deepEqual(runner.calls, [])
 })
 
+// Named after a custom/MCP tool, not opencode's built-in `task`: `task` takes
+// {description, prompt, subagent_type} and no `command`, so listing it would
+// look guarded while checking nothing.
 test('DCG_PLUGIN_TOOLS widens what gets checked', async () => {
+  const runner = fakeRunner(decisionRun({ decision: 'deny' }, 1))
+  const check = createGuard({ config: config({ DCG_PLUGIN_TOOLS: 'bash,my-shell-tool' }), runner })
+
+  await assert.rejects(() => check('my-shell-tool', { command: 'rm -rf /' }), DcgBlockedError)
+})
+
+test('DCG_PLUGIN_TOOLS matches tool names case-insensitively', async () => {
+  const runner = fakeRunner(decisionRun({ decision: 'deny' }, 1))
+  const check = createGuard({ config: config({ DCG_PLUGIN_TOOLS: 'Bash' }), runner })
+
+  await assert.rejects(() => check('bash', { command: 'rm -rf /' }), DcgBlockedError)
+})
+
+// A listed tool whose arguments carry no command is left alone rather than
+// blocked — but it is then not guarded, which is what the README warns about.
+test('a listed tool with no command argument is not checked', async () => {
   const runner = fakeRunner(decisionRun({ decision: 'deny' }, 1))
   const check = createGuard({ config: config({ DCG_PLUGIN_TOOLS: 'bash,task' }), runner })
 
-  await assert.rejects(() => check('task', { command: 'rm -rf /' }), DcgBlockedError)
+  await check('task', { description: 'go', prompt: 'rm -rf /', subagent_type: 'general' })
+
+  assert.deepEqual(runner.calls, [])
 })
 
 test('disabled means the binary is never consulted', async () => {

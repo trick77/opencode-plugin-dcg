@@ -69,12 +69,17 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): ConfigResul
 
   // An empty tool list would disable the guard while looking configured, so an
   // all-blank value falls back to the default rather than checking nothing.
+  //
+  // Names are lowercased to match: opencode hands the hook a lowercase tool id,
+  // so a stored "Bash" would never compare equal and would silently guard
+  // nothing — the exact quiet-misconfiguration failure this module exists to
+  // prevent.
   let tools: ReadonlySet<string> = new Set([DEFAULT_TOOL])
   const rawTools = env.DCG_PLUGIN_TOOLS?.trim()
   if (rawTools) {
     const names = rawTools
       .split(',')
-      .map((t) => t.trim())
+      .map((t) => t.trim().toLowerCase())
       .filter((t) => t !== '')
     if (names.length > 0) tools = new Set(names)
     else warnings.push(`DCG_PLUGIN_TOOLS="${rawTools}" lists no tool names. Checking "${DEFAULT_TOOL}".`)

@@ -36,8 +36,14 @@ export const spawnDcg: DcgRunner = (binary, args, timeoutMs) =>
       { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, killSignal: 'SIGKILL' },
       (error, stdout, stderr) => {
         const err = error as ExecFileException | null
+        // A maxBuffer overflow is delivered as a kill too, so it has to be
+        // ruled out before `killed` is read as "the timeout fired". Both
+        // resolve through the same fail-mode, but mislabelling one as the
+        // other sends a debugger after DCG_PLUGIN_TIMEOUT_MS, which cannot fix
+        // output that was simply too large.
+        const overflowed = err?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
         // execFile reports the timeout kill as a signal, not an error code.
-        const timedOut = err?.killed === true || err?.signal === 'SIGKILL'
+        const timedOut = !overflowed && (err?.killed === true || err?.signal === 'SIGKILL')
         resolve({
           stdout: stdout ?? '',
           stderr: stderr ?? '',
@@ -50,26 +56,62 @@ export const spawnDcg: DcgRunner = (binary, args, timeoutMs) =>
   })
 
 /**
- * Pull the first JSON object out of dcg's stdout.
+ * Index just past the object that starts at `start`, or -1 if it never closes.
  *
- * dcg is well-behaved in robot mode, but a shell profile that prints a banner
- * can prepend noise to a subprocess's stdout, and losing the whole verdict to
- * a stray line would fail the command open. Scanning for the first `{` and
- * parsing from there is enough without pretending to be a JSON stream parser.
+ * Brace counting that knows about strings and escapes, so a `}` inside a
+ * reason string does not end the object early.
+ */
+function objectEnd(text: string, start: number): number {
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (ch === '\\') escaped = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') inString = true
+    else if (ch === '{') depth++
+    else if (ch === '}' && --depth === 0) return i + 1
+  }
+  return -1
+}
+
+/**
+ * Pull dcg's decision object out of stdout.
+ *
+ * dcg is well-behaved in robot mode, but a subprocess's stdout is not ours
+ * alone: a shell profile can prepend a banner, and a stray log line can follow
+ * the JSON. Losing the whole verdict to either would fail the command open, so
+ * every `{` is tried as a start and the object is closed by brace counting
+ * rather than by assuming it runs to the end of the output.
+ *
+ * An object carrying a `decision` wins over one that does not, so a `{…}` in
+ * the surrounding noise cannot shadow the real verdict.
  */
 export function parseDecisionJSON(stdout: string): Record<string, unknown> | null {
-  const start = stdout.indexOf('{')
-  if (start === -1) return null
-  const candidate = stdout.slice(start).trim()
-  try {
-    const parsed: unknown = JSON.parse(candidate)
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>
+  let fallback: Record<string, unknown> | null = null
+  for (let i = stdout.indexOf('{'); i !== -1; i = stdout.indexOf('{', i + 1)) {
+    const end = objectEnd(stdout, i)
+    if (end === -1) break
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(stdout.slice(i, end))
+    } catch {
+      // Not JSON. Try the next `{` — an unparseable body is a failure, not an
+      // allow, but a banner brace must not be what makes it one.
+      continue
     }
-  } catch {
-    // Fall through: an unparseable body is a failure, not an allow.
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue
+    const object = parsed as Record<string, unknown>
+    if (typeof object.decision === 'string') return object
+    fallback ??= object
+    i = end - 1
   }
-  return null
+  return fallback
 }
 
 function firstString(source: Record<string, unknown>, keys: readonly string[]): string | undefined {
@@ -80,8 +122,34 @@ function firstString(source: Record<string, unknown>, keys: readonly string[]): 
   return undefined
 }
 
+/** Longest failure detail quoted back. dcg's output can be megabytes. */
+const MAX_DETAIL = 400
+
+function clip(text: string): string {
+  return text.length <= MAX_DETAIL ? text : `${text.slice(0, MAX_DETAIL)}… (truncated)`
+}
+
 /** Turn one raw run into a verdict or a failure. */
 export function interpret(run: DcgRun): DcgOutcome {
+  // stdout is read BEFORE the spawn-level failures. A dcg that printed a
+  // complete verdict and then hung — child holding the pipe, slow exit, tight
+  // DCG_PLUGIN_TIMEOUT_MS — still answered. Discarding that answer and
+  // resolving the kill through the fail-mode would run, under the default
+  // fail-open, a command dcg had already denied.
+  const payload = parseDecisionJSON(run.stdout)
+  const rawDecision = payload?.decision
+  if (payload && typeof rawDecision === 'string' && rawDecision.trim() !== '') {
+    const decision = rawDecision.trim().toLowerCase()
+    return {
+      kind: 'verdict',
+      decision,
+      blocked: !PASSING_DECISIONS.has(decision),
+      reason: firstString(payload, ['reason', 'message', 'explanation']),
+      rule: firstString(payload, ['rule', 'rule_id', 'ruleId', 'pack']),
+      suggestion: firstString(payload, ['suggestion', 'remediation', 'fix']),
+    }
+  }
+
   if (run.error?.code === 'ENOENT') {
     return { kind: 'failure', reason: 'missing-binary', detail: 'dcg is not on PATH' }
   }
@@ -89,18 +157,7 @@ export function interpret(run: DcgRun): DcgOutcome {
     return { kind: 'failure', reason: 'timeout', detail: 'dcg did not answer before the timeout' }
   }
 
-  const payload = parseDecisionJSON(run.stdout)
-  if (!payload) {
-    const detail = run.stderr.trim() || run.stdout.trim() || `dcg exited with code ${run.code}`
-    return {
-      kind: 'failure',
-      reason: run.error && run.stdout.trim() === '' ? 'spawn-error' : 'unparseable',
-      detail,
-    }
-  }
-
-  const rawDecision = payload.decision
-  if (typeof rawDecision !== 'string' || rawDecision.trim() === '') {
+  if (payload) {
     return {
       kind: 'failure',
       reason: 'unparseable',
@@ -108,14 +165,11 @@ export function interpret(run: DcgRun): DcgOutcome {
     }
   }
 
-  const decision = rawDecision.trim().toLowerCase()
+  const detail = run.stderr.trim() || run.stdout.trim() || `dcg exited with code ${run.code}`
   return {
-    kind: 'verdict',
-    decision,
-    blocked: !PASSING_DECISIONS.has(decision),
-    reason: firstString(payload, ['reason', 'message', 'explanation']),
-    rule: firstString(payload, ['rule', 'rule_id', 'ruleId', 'pack']),
-    suggestion: firstString(payload, ['suggestion', 'remediation', 'fix']),
+    kind: 'failure',
+    reason: run.error && run.stdout.trim() === '' ? 'spawn-error' : 'unparseable',
+    detail: clip(detail),
   }
 }
 

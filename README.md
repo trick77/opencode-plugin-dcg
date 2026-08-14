@@ -40,7 +40,7 @@ looking installed.
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-dcg@0.1.0"]
+  "plugin": ["opencode-plugin-dcg@0.1.1"]
 }
 ```
 
@@ -86,7 +86,7 @@ agent calls a shell tool
   tool.execute.before          read output.args.command
         │
         ▼
-  dcg --robot test <command>   spawned without a shell; parse JSON stdout
+  dcg --robot test -- <cmd>    spawned without a shell; parse JSON stdout
         │
    ┌────┴─────┐
    ▼          ▼

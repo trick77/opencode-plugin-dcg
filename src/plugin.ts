@@ -18,7 +18,7 @@
 //
 // Configure in opencode.json:
 //
-//   { "plugin": ["opencode-plugin-dcg@0.1.0"] }
+//   { "plugin": ["opencode-plugin-dcg@0.1.1"] }
 //
 // Behaviour is set through the environment: DCG_PLUGIN_ENABLED,
 // DCG_PLUGIN_FAIL_MODE, DCG_PLUGIN_TIMEOUT_MS, DCG_PLUGIN_TOOLS,

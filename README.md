@@ -16,11 +16,20 @@ The plugin does **not** install dcg, and does not track its version. Install it
 first — see the [dcg installation docs](https://github.com/Dicklesworthstone/destructive_command_guard#installation):
 
 ```bash
+# Homebrew, from the upstream tap (macOS and Linux):
+brew install dicklesworthstone/tap/dcg
+
+# or the install script:
 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/destructive_command_guard/main/install.sh" | bash -s -- --easy-mode
 
 dcg --version
 dcg --robot test "rm -rf /"   # prints JSON with a deny decision
 ```
+
+Either way is enough for this plugin: it asks the binary directly, so `dcg` on
+`PATH` (or `DCG_PLUGIN_BINARY` pointing at it) is all that is needed. dcg's own
+`dcg install` step wires dcg into *other* agents' hook systems — opencode is not
+one of them, which is what this plugin is for — so it is optional here.
 
 If dcg is missing, the plugin says so once and then follows
 `DCG_PLUGIN_FAIL_MODE` — it never silently passes commands through while

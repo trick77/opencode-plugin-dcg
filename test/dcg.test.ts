@@ -11,14 +11,21 @@ test('asks dcg in robot mode, passing the command as one argv element', async ()
   assert.deepEqual(runner.calls, [
     {
       binary: 'dcg',
-      args: ['--robot', 'test', 'rm -rf ./build; echo $(whoami)'],
+      args: ['--robot', 'test', '--', 'rm -rf ./build; echo $(whoami)'],
       timeoutMs: 1234,
     },
   ])
 })
 
 test('dcgArgs keeps the command whole, never split on shell metacharacters', () => {
-  assert.deepEqual(dcgArgs('a && b | c'), ['--robot', 'test', 'a && b | c'])
+  assert.deepEqual(dcgArgs('a && b | c'), ['--robot', 'test', '--', 'a && b | c'])
+})
+
+// Without `--`, dcg parses a dashed command as its own flags and answers with
+// a usage error and no JSON — an unparseable failure that runs the command
+// unchecked under the default fail-open.
+test('dcgArgs ends the option list so a dashed command is not read as flags', () => {
+  assert.deepEqual(dcgArgs('-rf /tmp/x'), ['--robot', 'test', '--', '-rf /tmp/x'])
 })
 
 test('allow and log let the command through; everything else blocks', () => {

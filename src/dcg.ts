@@ -31,9 +31,15 @@ const PASSING_DECISIONS: ReadonlySet<string> = new Set(['allow', 'log'])
  * The command is passed as its own argv element through `execFile`, so no
  * shell ever sees it — quoting, `$(…)`, backticks and newlines in the
  * candidate command are inert here.
+ *
+ * `--` ends dcg's own option list. Without it a command that starts with a
+ * dash is parsed as flags — dcg answers `error: unexpected argument '-r'
+ * found` with no JSON at all, which is an unparseable failure and, under the
+ * default fail-open, an unguarded command. Verified against dcg 0.11.0: `--`
+ * is accepted for every command, dashed or not.
  */
 export function dcgArgs(command: string): readonly string[] {
-  return ['--robot', 'test', command]
+  return ['--robot', 'test', '--', command]
 }
 
 /** The real runner. Never used by the unit tests. */

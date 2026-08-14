@@ -4,7 +4,7 @@
 // unit-testable without a plugin host or a real binary.
 
 import type { DcgOutcome, DcgPluginConfig, DcgRunner } from './types.ts'
-import { evaluate } from './dcg.ts'
+import { clip, evaluate } from './dcg.ts'
 
 export type Reporter = (level: 'info' | 'warn', message: string) => void
 
@@ -27,10 +27,13 @@ export class DcgBlockedError extends Error {
 export function blockMessage(command: string, outcome: DcgOutcome): string {
   const lines: string[] = []
   if (outcome.kind === 'verdict') {
+    // The command goes in whole — the agent has to see what was blocked — but
+    // everything dcg wrote is clipped, same as a failure detail: these fields
+    // come straight out of dcg's JSON and are not bounded at the source.
     lines.push(`Blocked by dcg (decision: ${outcome.decision}): ${command}`)
-    if (outcome.reason) lines.push(`Reason: ${outcome.reason}`)
-    if (outcome.rule) lines.push(`Rule: ${outcome.rule}`)
-    if (outcome.suggestion) lines.push(`Suggestion: ${outcome.suggestion}`)
+    if (outcome.reason) lines.push(`Reason: ${clip(outcome.reason)}`)
+    if (outcome.rule) lines.push(`Rule: ${clip(outcome.rule)}`)
+    if (outcome.suggestion) lines.push(`Suggestion: ${clip(outcome.suggestion)}`)
   } else {
     lines.push(`Blocked: dcg could not check this command (${outcome.reason}): ${command}`)
     lines.push(`Detail: ${outcome.detail}`)

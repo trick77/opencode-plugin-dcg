@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { DcgBlockedError, commandFromArgs, createGuard } from '../src/guard.ts'
+import { DcgBlockedError, blockMessage, commandFromArgs, createGuard } from '../src/guard.ts'
 import { configFromEnv } from '../src/config.ts'
 import { decisionRun, fakeRunner } from './helpers/fake-runner.ts'
 import { collectReports } from './helpers/collect.ts'
@@ -39,6 +39,22 @@ test('a denied command aborts with dcg reason, rule and suggestion', async () =>
       return true
     },
   )
+})
+
+// reason, rule and suggestion come straight out of dcg's JSON and are not
+// bounded at the source, so a megabyte reason must not become a megabyte of
+// tool output. The command itself stays whole — the agent has to see it.
+test('dcg-supplied text in a block message is truncated', () => {
+  const message = blockMessage('rm -rf /', {
+    kind: 'verdict',
+    decision: 'deny',
+    blocked: true,
+    reason: 'x'.repeat(50_000),
+    suggestion: 'y'.repeat(50_000),
+  })
+
+  assert.ok(message.length < 2000, `message was ${message.length} chars`)
+  assert.match(message, /rm -rf \//)
 })
 
 test('tools outside the configured set are never checked', async () => {

@@ -79,6 +79,27 @@ test('finds the verdict despite noise around it', () => {
   }
 })
 
+// An unmatched `{` in the noise consumes the braces of the JSON after it, so
+// that candidate never closes. Giving up on the whole scan there lost the
+// verdict and, under the default fail-open, ran the denied command.
+test('an unmatched brace in the noise does not hide the verdict', () => {
+  for (const stdout of [
+    'warning: unmatched { brace\n{"decision":"deny"}',
+    '{\n{"decision":"deny"}',
+    '{"decision":"deny"}\ntrailing { noise',
+  ]) {
+    assert.equal(parseDecisionJSON(stdout)?.decision, 'deny', stdout)
+  }
+})
+
+// A wall of unmatched braces exhausts the candidate cap. That must land on a
+// failure for the fail-mode to resolve, never on an allow.
+test('exhausting the candidate scan is a failure, not a pass', () => {
+  const outcome = interpret({ stdout: '{'.repeat(5000), stderr: '', code: 0 })
+
+  assert.equal(outcome.kind, 'failure')
+})
+
 // A dcg that printed its verdict and then hung still answered. Dropping that
 // answer and resolving the kill through the fail-mode would run a denied
 // command.
@@ -109,6 +130,22 @@ test('a missing binary is a failure, not a decision', () => {
     reason: 'missing-binary',
     detail: 'dcg is not on PATH',
   })
+})
+
+// An installed-but-not-executable dcg prints nothing and has no numeric exit
+// code, so the detail used to read "dcg exited with code null" — a report that
+// names no cause at all.
+test('a spawn failure with no output reports the error message, not a null code', () => {
+  const outcome = interpret({
+    stdout: '',
+    stderr: '',
+    code: null,
+    error: { code: 'EACCES', message: 'spawn dcg EACCES' },
+  })
+
+  assert.equal(outcome.kind, 'failure')
+  assert.equal(outcome.kind === 'failure' && outcome.reason, 'spawn-error')
+  assert.match(outcome.kind === 'failure' ? outcome.detail : '', /EACCES/)
 })
 
 test('a timeout is a failure', () => {

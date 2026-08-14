@@ -13,7 +13,8 @@ binary before each tool call.
 - Entry module `src/index.ts`: EVERY runtime export must be a plugin function.
   opencode's loader iterates `Object.values(mod)` and throws "Plugin export is
   not a function" on anything else. Re-export types with `export type *`, NEVER
-  `export *` — `types.ts` exports a value (`PASSING_DECISIONS`).
+  `export *`. Keep `types.ts` type-only — a value there reaches the loader
+  through the re-export; runtime constants live next to their reader.
 - Helpers live in `test/helpers/` so the `test/*.test.ts` glob skips them.
 - Harness runs on NODE; opencode runs BUN. Touching `src/index.ts` exports or
   anything transpiler-sensitive → also load for real: scratch dir with

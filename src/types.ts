@@ -3,6 +3,11 @@
 // The plugin is a thin adapter: dcg owns every rule, pack and allowlist
 // (`~/.config/dcg/config.toml`, project-level `.dcg.toml`). Nothing here
 // re-implements dcg policy — it only models what dcg answers with.
+//
+// Types ONLY, no runtime exports. `src/index.ts` re-exports this module and
+// opencode's loader throws on any export of the entry module that is not a
+// plugin function; with nothing but types here, that mistake cannot be made.
+// The passing-decision set lives next to its only reader, in `dcg.ts`.
 
 /**
  * The decision values dcg emits. `DCG_POLICY_DEFAULT_MODE` documents
@@ -14,9 +19,6 @@
  * the agent can ignore is not a guard.
  */
 export type DcgDecision = 'allow' | 'log' | 'warn' | 'ask' | 'deny'
-
-/** Decisions that let the command run. Everything else blocks. */
-export const PASSING_DECISIONS: ReadonlySet<string> = new Set(['allow', 'log'])
 
 /** What dcg said about one command. */
 export interface DcgVerdict {

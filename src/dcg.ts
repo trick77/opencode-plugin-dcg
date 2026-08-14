@@ -13,7 +13,16 @@
 import { execFile } from 'node:child_process'
 import type { ExecFileException } from 'node:child_process'
 import type { DcgOutcome, DcgRun, DcgRunner } from './types.ts'
-import { PASSING_DECISIONS } from './types.ts'
+
+/**
+ * Decisions that let the command run. Everything else blocks.
+ *
+ * Lives here rather than in `types.ts` so that module stays value-free:
+ * opencode's plugin loader iterates the entry module's runtime exports and
+ * throws on anything that is not a plugin function, and a type-only `types.ts`
+ * has no value left for a re-export to leak through.
+ */
+const PASSING_DECISIONS: ReadonlySet<string> = new Set(['allow', 'log'])
 
 /**
  * Robot mode forces JSON on stdout regardless of `--format`, and `test`
@@ -22,9 +31,15 @@ import { PASSING_DECISIONS } from './types.ts'
  * The command is passed as its own argv element through `execFile`, so no
  * shell ever sees it — quoting, `$(…)`, backticks and newlines in the
  * candidate command are inert here.
+ *
+ * `--` ends dcg's own option list. Without it a command that starts with a
+ * dash is parsed as flags — dcg answers `error: unexpected argument '-r'
+ * found` with no JSON at all, which is an unparseable failure and, under the
+ * default fail-open, an unguarded command. Verified against dcg 0.11.0: `--`
+ * is accepted for every command, dashed or not.
  */
 export function dcgArgs(command: string): readonly string[] {
-  return ['--robot', 'test', command]
+  return ['--robot', 'test', '--', command]
 }
 
 /** The real runner. Never used by the unit tests. */
@@ -81,6 +96,14 @@ function objectEnd(text: string, start: number): number {
 }
 
 /**
+ * How many `{` positions are tried before giving up. Bounds the quadratic
+ * worst case on a maxBuffer-sized wall of unmatched braces. Running out
+ * returns null, which is a failure for the fail-mode to resolve — the cap can
+ * never turn into an allow.
+ */
+const MAX_OBJECT_CANDIDATES = 500
+
+/**
  * Pull dcg's decision object out of stdout.
  *
  * dcg is well-behaved in robot mode, but a subprocess's stdout is not ours
@@ -94,9 +117,16 @@ function objectEnd(text: string, start: number): number {
  */
 export function parseDecisionJSON(stdout: string): Record<string, unknown> | null {
   let fallback: Record<string, unknown> | null = null
+  let tried = 0
   for (let i = stdout.indexOf('{'); i !== -1; i = stdout.indexOf('{', i + 1)) {
+    if (++tried > MAX_OBJECT_CANDIDATES) break
     const end = objectEnd(stdout, i)
-    if (end === -1) break
+    // An unmatched `{` — a banner brace that never closes — swallows the
+    // braces of the JSON that follows it, so this candidate never reaches
+    // depth 0. Skip it and try the next `{`: abandoning the scan here would
+    // throw away a verdict sitting right there in the output and, under the
+    // default fail-open, run the command dcg had just denied.
+    if (end === -1) continue
     let parsed: unknown
     try {
       parsed = JSON.parse(stdout.slice(i, end))
@@ -122,10 +152,10 @@ function firstString(source: Record<string, unknown>, keys: readonly string[]): 
   return undefined
 }
 
-/** Longest failure detail quoted back. dcg's output can be megabytes. */
+/** Longest dcg-sourced text quoted back. dcg's output can be megabytes. */
 const MAX_DETAIL = 400
 
-function clip(text: string): string {
+export function clip(text: string): string {
   return text.length <= MAX_DETAIL ? text : `${text.slice(0, MAX_DETAIL)}… (truncated)`
 }
 
@@ -165,7 +195,15 @@ export function interpret(run: DcgRun): DcgOutcome {
     }
   }
 
-  const detail = run.stderr.trim() || run.stdout.trim() || `dcg exited with code ${run.code}`
+  // run.error.message comes before the exit code: a binary that exists but is
+  // not executable (EACCES, the usual outcome of an install that lost its +x)
+  // prints nothing and carries no numeric code, so the exit-code line alone
+  // would report it as "dcg exited with code null" and name no cause at all.
+  const detail =
+    run.stderr.trim() ||
+    run.stdout.trim() ||
+    run.error?.message?.trim() ||
+    `dcg exited with code ${run.code}`
   return {
     kind: 'failure',
     reason: run.error && run.stdout.trim() === '' ? 'spawn-error' : 'unparseable',

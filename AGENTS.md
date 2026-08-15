@@ -37,6 +37,22 @@ output — must be a named `DcgFailure`, reported to the user, and resolved by
   races the first tool calls and lets them through unchecked.
 - Warn once per session for a missing binary, not once per command.
 
+## Configuration layers
+
+Two layers, resolved in `src/config.ts`: `opencode.json` plugin options (the
+`[spec, options]` tuple opencode passes as the plugin function's second
+argument) are the base; `DCG_PLUGIN_*` env vars override them. Adding a setting
+means adding it to BOTH layers and to the README table.
+
+An invalid value in one layer warns and is SKIPPED — it must never discard a
+valid value from the layer beneath, and the warning must name its origin
+(`opencode.json failMode` vs `DCG_PLUGIN_FAIL_MODE`) or the user cannot find
+what to fix.
+
+Normalise in the PARSER, not at the call site: tool names are lowercased inside
+`parseTools` so both layers agree, because `guard.ts` looks them up with
+`tool.toLowerCase()`.
+
 ## Boundaries
 
 - dcg owns all policy: rules, packs, severities, allowlists, `DCG_BYPASS`.

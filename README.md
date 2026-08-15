@@ -40,7 +40,7 @@ looking installed.
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-dcg@0.1.1"]
+  "plugin": ["opencode-plugin-dcg@0.2.0"]
 }
 ```
 
@@ -63,7 +63,7 @@ by replacing the plugin string with a `[spec, options]` pair:
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": [
-    ["opencode-plugin-dcg@0.1.1", { "failMode": "closed", "tools": ["bash", "my-shell-tool"] }]
+    ["opencode-plugin-dcg@0.2.0", { "failMode": "closed", "tools": ["bash", "my-shell-tool"] }]
   ]
 }
 ```

@@ -18,8 +18,8 @@
 //
 // Configure in opencode.json, either bare or with options:
 //
-//   { "plugin": ["opencode-plugin-dcg@0.1.1"] }
-//   { "plugin": [["opencode-plugin-dcg@0.1.1", { "failMode": "closed" }]] }
+//   { "plugin": ["opencode-plugin-dcg@0.2.0"] }
+//   { "plugin": [["opencode-plugin-dcg@0.2.0", { "failMode": "closed" }]] }
 //
 // Options: enabled, failMode, timeoutMs, tools, binary. The matching
 // DCG_PLUGIN_* environment variables override them. See the README.
